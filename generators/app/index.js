@@ -2,23 +2,31 @@
 const Generator = require("yeoman-generator");
 const chalk = require("chalk");
 const yosay = require("yosay");
+const _ = require("lodash");
+const fs = require("fs");
 
 module.exports = class extends Generator {
+  constructor(args, opts) {
+    super(args, opts);
+
+    this.framework = opts.framework;
+  }
+
   async prompting() {
     // Have Yeoman greet the user.
-    this.log(
-      yosay(
-        `Welcome to the ${chalk.red(
-          "md-eslint"
-        )} generator!`
-      )
-    );
+    this.log(yosay(`Welcome to the ${chalk.red("md-eslint")} generator!`));
 
-    const prompts = [
+    this.answers = await this.prompt([
+      {
+        type: "confirm",
+        name: "isDefaultConfig",
+        message: "Do you want to use default config?",
+        default: true
+      },
       {
         type: "checkbox",
         name: "lintOptions",
-        message: "Select Rule Groups:",
+        message: "Select rules for your project:",
         choices: [
           {
             name: "Strict naming convention",
@@ -30,17 +38,18 @@ module.exports = class extends Generator {
             value: "importsOrder",
             checked: true
           }
-        ]
+        ],
+        when(answers) {
+          return !answers.isDefaultConfig;
+        }
       }
-    ];
-
-    this.answers = await this.prompt(prompts).then(props => {
-      const hasLintOption = (feat) => props.lintOptions.indexOf(feat) !== -1;
+    ]).then(props => {
+      const hasLintOption = feat => props.lintOptions.indexOf(feat) !== -1;
 
       return {
-        strictNames: hasLintOption('strictNames'),
-        importsOrder: hasLintOption('importsOrder'),
-      }
+        strictNames: props.isDefaultConfig || hasLintOption("strictNames"),
+        importsOrder: props.isDefaultConfig || hasLintOption("importsOrder")
+      };
     });
   }
 
@@ -48,12 +57,27 @@ module.exports = class extends Generator {
     this.fs.copyTpl(
       this.templatePath(".eslintrc.js"),
       this.destinationPath(".eslintrc.js"),
-      {answers: this.answers}
+      { answers: this.answers }
     );
 
+    // Merge Package Json
+    const templateJSON = this.fs.readJSON(this.templatePath("package.json"));
+    const usersJSON = this.fs.readJSON(this.destinationPath("package.json"));
+    const newPackageJsonContent = _.merge(usersJSON, templateJSON);
+    fs.writeFileSync(
+      this.destinationPath("package.json"),
+      JSON.stringify(newPackageJsonContent, null, 4)
+    );
   }
 
   install() {
-    this.installDependencies();
+    this.installDependencies({
+      npm: true,
+      yarn: true,
+      callback: function() {
+        console.log("Everything is ready!");
+        console.log("Thanks for using MD tools");
+      }
+    });
   }
 };
